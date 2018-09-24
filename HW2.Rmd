@@ -1,30 +1,25 @@
 ---
 title: "HW2 STA521 Fall18"
-author: '[Your Name Here, netid and github username here]'
-date: "Due September 23, 2018 5pm"
+author: '[Zhaolin Ying zy70 github:sallyying]'
+date: "Due September 24, 2018 9am"
 output:
   pdf_document: default
   html_document:
     df_print: paged
 ---
 
-## Backgound Reading
-
-Readings: Chapters 3-4 in Weisberg Applied Linear Regression
-
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(GGally)
+library(MASS)
 ```
-
-This exercise involves the UN data set from `alr3` package. Install `alr3` and the `car` packages and load the data to answer the following questions adding your code in the code chunks.  Please add appropriate code to the chunks to suppress messages and warnings as needed once you are sure the code is working properly and remove instructions if no longer needed. Figures should have informative captions. Please switch the output to pdf for your final version to upload to Sakai. **Remove these instructions for final submission**
 
 
 ## Exploratory Data Analysis
 
-0.  Preliminary read in the data.  After testing, modify the code chunk so that output, messages and warnings are suppressed.  *Exclude text from final*
-
-```{r data}
+```{r data, echo=FALSE,include=FALSE}
 library(alr3)
 data(UN3, package="alr3")
 help(UN3) 
@@ -34,14 +29,21 @@ library(car)
 
 1. Create a summary of the data.  How many variables have missing data?  Which are quantitative and which are qualtitative?
 
-```{r}
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+summary(UN3)
+sapply(UN3,anyNA)
+sapply(UN3,is.numeric)
 
 ```
+The result shows that all variables, except for "Purban", have missing data.
+All variables are quantitative.
+
 
 2. What is the mean and standard deviation of each quantitative predictor?  Provide in a nicely formatted table.
 
-```{r}
-
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+UN3stat=sapply(UN3,function(x) c(mean(x,na.rm = TRUE),sd(x,na.rm = TRUE)))
+knitr::kable(t(UN3stat),col.names=c("mean","sd"))
 ```
 
 
@@ -49,71 +51,140 @@ library(car)
 highlighting the relationships among the predictors. Comment
 on your findings regarding trying to predict `ModernC` from the other variables.  Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
 
-```{r}
-
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+gp=ggpairs(na.omit(UN3),title="pairs plot")
+print(gp,progress=F)
 ```
+
+Variables including "Fertility", "Purban", "PPdgp", and "Change" may be useful in predicting ModernC. There may be nonlinear relationships between "ModernC" and "Change", "PPgdp" and "Pop".
+The plots between "ModernC" and "PPgdp", "Purban" shows there are potential outliers, given there are data points obviously far away from other data. 
+
 
 ## Model Fitting
 
 4.  Use the `lm()` function to perform a multiple linear regression with `ModernC` as the response and all other variables as the predictors, using the formula `ModernC ~ .`, where the `.` includes all remaining variables in the dataframe.  Create  diagnostic residual plot from the linear model object and comment on results regarding assumptions.  How many observations are used in your model fitting?
 
-```{r}
-
+```{r, fig.height=6,echo=FALSE, message=FALSE, warning=FALSE}
+UN3.lm1<-lm(ModernC~.,data=na.omit(UN3))
+par(mfrow=c(2,2))
+plot(UN3.lm1)
+length(UN3.lm1$fitted)
+length(UN3$ModernC)
 ```
+
+There is funnel shape in plot "Residual-Fitted values". This shows variance of error term may not be constant. We might consider log transforms. 
+Also, the standarized residual of "Poland", "Cook.Islands", and "Azerbaijian" are obviously bigger than other points. They may be outliers.
+"China" and "India" are points with high leverage.
+We can see that 125 observations are used in the model fitting, while originally we have 210 observations in total.
+
 
 5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
 
-```{r}
-
+```{r, fig.height=6,echo=FALSE, message=FALSE, warning=FALSE}
+avPlots(UN3.lm1) 
+influencePlot(UN3.lm1,main="Influence Plot")
 ```
+For the avplot between ModernC and Pop, the residual Pop values are concenterated in the left area. We may consider log transformation of the Pop variable.
+
+Also, from the avplots, we can see that Kuwait and Cook Islands may be influential on Change.
+Switzerland and Norway may be influential on PPgdp.
+Yemen and Burundio may be influential on Frate. 
+India and China may be influential on Pop.
+Thailand and Niger may be influential on Fertility.
+Sri Lanka and Thailand may be influential on Purban.
 
 6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and  the resulting transformations.
 
-
-```{r}
-
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+UN3T=transform(na.omit(UN3),Change=Change-min(Change)+1)
+car::boxTidwell(ModernC~Change+Pop+PPgdp,~Frate+Fertility+Purban,data=UN3T)
 ```
+
+We use the function boxTidwell in library car to find appropriate transformations. And we minus min(Change) and add 1 to variable "Change" to make it positive.
+
+The result shows that we should take reciprocal of the variable ""Change", and take log transformation of "PPgdp" and "Pop". 
+
 
 7. Given the selected transformations of the predictors, select a transformation of the response using `MASS::boxcox` or `car::boxCox` and justify.
 
 
-```{r}
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+UN3.lm2<-lm(ModernC~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Fertility+Purban,data=UN3T)
+boxcox(UN3.lm2, plotit = TRUE)
 
 ```
 
+Using the boxcox method, we see that $\lambda=1$ is very close to right side of the 95% confidence interval, and is extremely close to the maximum log-likelihood, which suggests we can set $\lambda=1$ and don't transform Y. We also tried to transfrom response with $\lambda=0.75$ which realizes the maximum likelihood. But it didn't show much difference in their diagnostic plots or adjusted R-square. So we would not transform the response.
+
+
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
+
+```{r, fig.height=6,echo=FALSE, message=FALSE, warning=FALSE}
+UN3.lm3<-lm(ModernC~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Fertility+Purban,data=UN3T)
+par(mfrow=c(2,2))
+plot(UN3.lm3)
+avPlots(UN3.lm3) 
+```
+
+We can see that after taking log of Pop, it shows much better linear relationship with ModernC in added-variable plot.
+Also, the residual plots showed that the new model fit the data better, with obvious improvements in the normal Q-Q plot. The high leverages also decrease a lot.
+
 
 9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?
 
 
-```{r}
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+boxcox(UN3.lm1, plotit = TRUE)
+UN3T=transform(na.omit(UN3),Change=Change-min(Change)+1)
+car::boxTidwell(ModernC~Change+Pop+PPgdp,~Frate+Fertility+Purban,data=UN3T)
 
 ```
+
+we see that $\lambda=1$ is in the 95% confidence interval, and is extremely close to the maximum log-likelihood, which suggests we can set $\lambda=1$ and don't transform Y. Then for the predictors, the result shows that we should take reciprocal of the variable ""Change", and take log transformation of "PPgdp" and "Pop". 
+
+So the model we get is totally the same as the model in 8.
 
 10.  Are there any outliers or influential points in the data?  Explain.  If so, refit the model after removing any outliers and comment on residual plots.
 
 
-```{r}
-
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+influencePlot(UN3.lm3,main="Influence Plot")
+UN3R=UN3T[ !(rownames(UN3T) %in% c("Poland","Cook.Islands")), ]
+UN3.lm4<-lm(ModernC~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Fertility+Purban,data=UN3R)
+par(mfrow=c(2,2))
+plot(UN3.lm4)
 ```
+From the result, we can see that for points "Cook.Islands" and "Poland", their studentized residual is outside the $\pm2$ range. So they are considered outliers, statistically significant at 95% level. 
+All the points' CookDistance is smaller than 1. So there are no influential points in the data.
+
+So we delete outliers "Cook.Islands" and "Poland". After removing the outliers, the new model is slightly better, although it didn't make much difference. Because these two outliers are not influential. 
+
 
 ## Summary of Results
 
 11. For your final model, provide summaries of coefficients with 95% confidence intervals in a nice table with interpretations of each coefficient.  These should be in terms of the original units! 
 
 
-```{r}
-
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+knitr::kable(confint(UN3.lm4))
 ```
 
+We didn't make transformations on the response "ModernC". So it is already in its original units. So when reciprocal of "change" increase one unit, then there is 95% possibility that the response "ModernC" will decrease between 19.5302624 and 59.9628672. When log(Pop) increase one unit, then there is 95% possibility that the response will increase between 0.7453949 and	3.0915993. Other coefficients' interpretations are similar. 	
+Variables including "Change", "Pop","PPgdp", and "Frate" have positive relationship with "ModernC", while "Fertility" and "Purban" have negative relationship with "ModernC".
 
-12. Provide a paragraph summarizing your final model  and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
 
 
-```{r}
+12. Provide a paragraph summarizing your final model and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
 
+In my final model, I take reciprocal of the variable ""Change", and take log transformation of "PPgdp" and "Pop". And I delete two outliers, "Poland" and "Cook.Islands". The regression result shows that variables including "Change", "Pop","PPgdp", and "Frate" have positive relationship with "ModernC", while "Fertility" and "Purban" have negative relationship with "ModernC".
+
+The two outliers that I delete have studentized residual outside the $\pm2$ range. So they are considered outliers, statistically significant at 95% level. After removing the two outliers, the new model is better as reflected in residual plots.
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+UN3R=UN3T[ !(rownames(UN3T) %in% c("Poland","Cook.Islands")), ]
+lm(ModernC~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Fertility+Purban,data=UN3R)
 ```
-
+ 
 
 ## Methodology
 
@@ -121,4 +192,46 @@ on your findings regarding trying to predict `ModernC` from the other variables.
 13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept._
 
 
+Suppose we regress $y$ on $x_1$ and $x_2$, and $x_3$ is added variable.
+$e_{(y)}$ means residual of regression y on $x_1$ and $x_2$, $e_{(x_3)}$ means residual of regression $x_3$ on $x_1$ and $x_2$.
+$$\overrightarrow{e_{(y)}}=\hat{\beta_0}\overrightarrow{i}+\hat{\beta}_1\overrightarrow{e_{(x_3)}}$$
+$$(I-H)Y=\hat{\beta}_0\overrightarrow{i}+\hat{\beta}_1(I-H)x_3$$
+where $\overrightarrow{i}$ is a $n*1$ vector of 1 and $H=X(X^TX)^{-1}X^T$
+since
+$$\hat{\beta}_1=(((I-H)x_3)^T(I-H)x_3)^{-1}((I-H)x_3)^T(I-H)Y$$
+and $I-H$ is symmetric and idempotent,
+thus we have
+$$\begin{aligned}
+(I-H)Y&=\hat{\beta_0}\overrightarrow{i}+(((I-H)x_3)^T(I-H)x_3)^{-1}((I-H)x_3)^T(I-H)Y(I-H)x_3\\
+&=\hat{\beta_0}\overrightarrow{i}+[x_3^T(I-H)(I-H)x_3]^{-1}x_3^T(I-H)(I-H)Y(I-H)x_3\\
+&=\hat{\beta_0}\overrightarrow{i}+[x_3^T(I-H)x_3]^{-1}x_3^T(I-H)Y(I-H)x_3
+\end{aligned}$$
+we know that both $[x_3^T(I-H)x_3]^{-1}$ and $x_3^T(I-H)Y$ is a $1*1$ scalar, so we can move them anywhere we want.
+so $$(I-H)Y=\hat{\beta_0}\overrightarrow{i}+(I-H)x_3[x_3^T(I-H)x_3]^{-1}x_3^T(I-H)Y$$
+let's left multiply $x_3^T$ on both sides, then we get
+$$\begin{aligned}
+x_3^T(I-H)Y&=x_3^T\hat{\beta}_0\overrightarrow{i}+x_3^T(I-H)x_3[x_3^T(I-H)x_3]^{-1}x_3^T(I-H)Y\\
+&=x_3^T\hat{\beta}_0\overrightarrow{i}+x_3^T(I-H)Y
+\end{aligned}$$
+so we have $$x_3^T\hat{\beta_0}\overrightarrow{i}=0$$
+i.e.,$$\sum_{i=1}^n x_3^i\hat{\beta_0}=0$$
+since the sum of elements in $x_3$ won't always be zero, so the intercept in the added variable scatter plot $\hat{\beta_0}$ will always be zero.
+
 14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
+
+I will take variable "Fertility" as example.
+```{r}
+test.lm1 <-lm(ModernC~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Fertility+Purban,data=UN3R)
+coefficients(test.lm1)
+e_y=residuals(lm(ModernC~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Purban,data=UN3R))
+Fertility_e_x=residuals(lm(Fertility~I(Change^(-1))+log(Pop)+log(PPgdp)+Frate+Purban,data=UN3R))
+test.lm2<-lm(e_y~Fertility_e_x)
+coefficients(test.lm2)
+```
+We can see that the coefficient of "Fertility" in the added variable regression is  -10.05694, which is exactly the same as the Fertility's coefficient in the full model.
+
+
+
+
+
+
